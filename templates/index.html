@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse Robot Agent</title>
+<meta name="description" content="Watch an AI agent plan routes, dodge obstacles and manage its battery in a live warehouse simulation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="bg-grid" aria-hidden="true"></div>
+<header class="top">
+  <a class="brand" href="#simulator">
+    <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect x="4" y="9" width="24" height="17" rx="5" fill="#F2B705" stroke="#16212B" stroke-width="2.5"/><circle cx="12" cy="17" r="2.6" fill="#16212B"/><circle cx="20" cy="17" r="2.6" fill="#16212B"/><path d="M16 9V4" stroke="#16212B" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="3.5" r="2" fill="#16212B"/></svg>
+    Warehouse Robot Agent
+  </a>
+  <nav aria-label="Sections">
+    <a href="#simulator">Simulator</a>
+  </nav>
+</header>
+<div class="stripe" aria-hidden="true"></div>
+
+<main>
+  <section id="simulator" class="hero">
+    <span class="tag"><span class="dot-live" aria-hidden="true"></span>Live server-side simulation</span>
+    <h1>Watch an AI agent run a warehouse</h1>
+    <p class="lede">It picks up packages, routes around moving people and robots, and recharges before the battery runs out. Every decision comes from the Python agent on the server. Press Play, then try dropping an obstacle in its way.</p>
+
+    <div class="console">
+      <div class="console-bar">
+        <span id="pill" class="pill">Ready</span>
+        <div class="progress" aria-label="Orders delivered"><div id="progfill"></div></div>
+        <span id="proglabel" class="proglabel">0 of 10 delivered</span>
+      </div>
+
+      <div class="console-body">
+        <div class="stage">
+          <span class="corner tl" aria-hidden="true"></span>
+          <span class="corner tr" aria-hidden="true"></span>
+          <span class="corner bl" aria-hidden="true"></span>
+          <span class="corner br" aria-hidden="true"></span>
+          <canvas id="floor" width="1320" height="792" role="img" aria-label="Top-down map of the warehouse showing the robot, shelves, packages and moving obstacles"></canvas>
+          <div id="now" class="now">Ready to start</div>
+          <div id="overlay" class="overlay" hidden>
+            <div class="result">
+              <h2 id="res-title">Run complete</h2>
+              <dl id="res-stats"></dl>
+              <button id="again" class="btn primary">Run a new scenario</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <section class="box">
+            <h3>Robot</h3>
+            <div class="bat"><div id="batfill"></div></div>
+            <p class="batlabel"><b id="battery">60</b>% battery <span id="carry"></span></p>
+            <dl class="stats">
+              <div><dt>Tick</dt><dd id="s-t">0</dd></div>
+              <div><dt>Distance</dt><dd id="s-steps">0</dd></div>
+              <div><dt>Replans</dt><dd id="s-replans">0</dd></div>
+              <div><dt>Charges</dt><dd id="s-charges">0</dd></div>
+            </dl>
+          </section>
+
+          <section class="box groq-box">
+            <h3>Groq LLM operations agent</h3>
+            <p class="ai-status"><span id="groq-dot" class="dot-live warn"></span><b id="groq-status">Checking Groq…</b></p>
+            <p class="ai-meta">Ask questions about the live robot, orders, battery, routes, or ML decision.</p>
+            <div class="groq-chat" id="groq-chat" aria-live="polite"><div class="groq-msg bot">Groq is connected server-side when GROQ_API_KEY is configured.</div></div>
+            <div class="groq-input"><input id="groq-input" type="text" placeholder="Ask Groq about this run…" maxlength="1000"><button id="groq-send" class="btn accent">Ask</button></div>
+          </section>
+
+          <section class="box ai-box">
+            <h3>ML decision engine</h3>
+            <p class="ai-status"><span id="ai-dot" class="dot-live"></span><b id="ai-model">Loading model…</b></p>
+            <p class="ai-meta" id="ai-meta">Random Forest • order-selection policy</p>
+            <div class="ai-choice">Chosen: <strong id="ai-choice">—</strong></div>
+          </section>
+
+          <section class="box">
+            <h3>This tick, the agent</h3>
+            <ol class="cyc">
+              <li><span>Senses</span><em id="c-sense">-</em></li>
+              <li><span>Updates its model</span><em id="c-model">-</em></li>
+              <li><span>Decides</span><em id="c-decide">-</em></li>
+              <li><span>Plans</span><em id="c-plan">-</em></li>
+              <li><span>Acts</span><em id="c-act">-</em></li>
+            </ol>
+          </section>
+
+          <section class="box">
+            <h3>Order queue</h3>
+            <table class="queue"><thead><tr><th>Order</th><th>Priority</th><th>Utility</th><th>AI</th></tr></thead>
+              <tbody id="queue"><tr><td colspan="4">No pending orders</td></tr></tbody></table>
+          </section>
+
+          <section class="box">
+            <h3>Event log</h3>
+            <ol id="log" class="log"></ol>
+          </section>
+        </aside>
+      </div>
+
+      <div class="console-foot">
+        <div class="row">
+          <button id="play" class="btn primary" aria-keyshortcuts="Space">Play</button>
+          <button id="step" class="btn" aria-keyshortcuts="S">Step</button>
+          <button id="finish" class="btn">Finish run</button>
+          <button id="reset" class="btn" aria-keyshortcuts="R">Reset</button>
+          <div class="seg" role="group" aria-label="Speed">
+            <button data-speed="320" aria-pressed="false">1x</button>
+            <button data-speed="160" aria-pressed="true">2x</button>
+            <button data-speed="80" aria-pressed="false">4x</button>
+            <button data-speed="30" aria-pressed="false">8x</button>
+          </div>
+          <button id="rush" class="btn accent">Add rush order</button>
+        </div>
+        <div class="row settings">
+          <label class="f">Seed <input id="seed" type="number" min="0" max="9999" value="1"></label>
+          <label class="f">Orders <input id="tasks" type="number" min="1" max="20" value="10"></label>
+          <label class="f">Obstacles <input id="obstacles" type="number" min="0" max="8" value="3"></label>
+          <span id="scenario-status" class="hint" aria-live="polite">Scenario: Seed 1 · 10 orders · 3 obstacles</span>
+          <span class="hint">Changing Seed, Orders or Obstacles automatically starts a new simulation.</span>
+        </div>
+        <p id="msg" class="msg" role="status"></p>
+      </div>
+    </div>
+
+    <ul class="legend">
+      <li><i class="sw robot"></i>Robot</li>
+      <li><i class="sw pick"></i>Package (number is priority)</li>
+      <li><i class="sw obs"></i>Moving obstacle</li>
+      <li><i class="sw chg"></i>Charger</li>
+      <li><i class="sw dsp"></i>Dispatch</li>
+      <li><i class="sw view"></i>Sensor range</li>
+      <li><i class="sw plan"></i>Planned route</li>
+    </ul>
+  </section>
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
